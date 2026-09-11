@@ -1,4 +1,5 @@
 import React, { Component, Fragment } from 'react';
+import { io } from 'socket.io-client';
 
 import Post from '../../components/Feed/Post/Post';
 import Button from '../../components/Button/Button';
@@ -22,7 +23,9 @@ class Feed extends Component {
   };
 
   componentDidMount() {
-    fetch('URL')
+    fetch('http://localhost:8080/auth/status', {
+      headers: { Authorization: 'Bearer ' + this.props.token }
+    })
       .then(res => {
         if (res.status !== 200) {
           throw new Error('Failed to fetch user status.');
@@ -35,7 +38,51 @@ class Feed extends Component {
       .catch(this.catchError);
 
     this.loadPosts();
+
+    this.socket = io('http://localhost:8080');
+    this.socket.on('posts', data => {
+      if (data.action === 'create') {
+        this.addPost(data.post);
+      } else if (data.action === 'update') {
+        this.updatePost(data.post);
+      } else if (data.action === 'delete') {
+        this.loadPosts();
+      }
+    });
   }
+
+  componentWillUnmount() {
+    if (this.socket) {
+      this.socket.disconnect();
+    }
+  }
+
+  addPost = post => {
+    this.setState(prevState => {
+      const updatedPosts = [...prevState.posts];
+      if (prevState.postPage === 1) {
+        if (updatedPosts.length >= 2) {
+          updatedPosts.pop();
+        }
+        updatedPosts.unshift({ ...post, imagePath: post.imageUrl });
+      }
+      return {
+        posts: updatedPosts,
+        totalPosts: prevState.totalPosts + 1
+      };
+    });
+  };
+
+  updatePost = post => {
+    this.setState(prevState => {
+      const updatedPosts = [...prevState.posts];
+      const postIndex = updatedPosts.findIndex(p => p._id === post._id);
+      if (postIndex > -1) {
+        updatedPosts[postIndex] = { ...post, imagePath: post.imageUrl };
+      }
+      return { posts: updatedPosts };
+    });
+  };
 
   loadPosts = direction => {
     if (direction) {
@@ -78,7 +125,14 @@ class Feed extends Component {
 
   statusUpdateHandler = event => {
     event.preventDefault();
-    fetch('URL')
+    fetch('http://localhost:8080/auth/status', {
+      method: 'PATCH',
+      headers: {
+        Authorization: 'Bearer ' + this.props.token,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ status: this.state.status })
+    })
       .then(res => {
         if (res.status !== 200 && res.status !== 201) {
           throw new Error("Can't update status!");
@@ -98,7 +152,6 @@ class Feed extends Component {
   startEditPostHandler = postId => {
     this.setState(prevState => {
       const loadedPost = { ...prevState.posts.find(p => p._id === postId) };
-
       return {
         isEditing: true,
         editPost: loadedPost
@@ -111,9 +164,7 @@ class Feed extends Component {
   };
 
   finishEditHandler = postData => {
-    this.setState({
-      editLoading: true
-    });
+    this.setState({ editLoading: true });
     const formData = new FormData();
     formData.append('title', postData.title);
     formData.append('content', postData.content);
@@ -139,30 +190,11 @@ class Feed extends Component {
         return res.json();
       })
       .then(resData => {
-        console.log(resData);
-        const post = {
-          _id: resData.post._id,
-          title: resData.post.title,
-          content: resData.post.content,
-          creator: resData.post.creator,
-          createdAt: resData.post.createdAt
-        };
-        this.setState(prevState => {
-          let updatedPosts = [...prevState.posts];
-          if (prevState.editPost) {
-            const postIndex = prevState.posts.findIndex(
-              p => p._id === prevState.editPost._id
-            );
-            updatedPosts[postIndex] = post;
-          } else if (prevState.posts.length < 2) {
-            updatedPosts = prevState.posts.concat(post);
-          }
-          return {
-            posts: updatedPosts,
-            isEditing: false,
-            editPost: null,
-            editLoading: false
-          };
+        // UI updates are driven by the socket 'posts' event
+        this.setState({
+          isEditing: false,
+          editPost: null,
+          editLoading: false
         });
       })
       .catch(err => {

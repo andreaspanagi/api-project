@@ -5,11 +5,15 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
 const multer = require('multer');
+const { createServer } = require('http');
+const { Server } = require('socket.io');
+const socketInit = require('./socket');
 
 const feedRoutes = require('./routes/feed');
 const authRoutes = require('./routes/auth');
 
 const app = express();
+const httpServer = createServer(app);
 
 const fileStorage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -32,8 +36,7 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-// app.use(bodyParser.urlencoded()); // x-www-form-urlencoded <form>
-app.use(bodyParser.json()); // application/json
+app.use(bodyParser.json());
 app.use(
   multer({ storage: fileStorage, fileFilter: fileFilter }).single('image')
 );
@@ -63,6 +66,16 @@ app.use((error, req, res, next) => {
 mongoose
   .connect(process.env.MONGO_URI)
   .then(result => {
-    app.listen(process.env.PORT || 8080);
+    const io = new Server(httpServer, {
+      cors: {
+        origin: '*',
+        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
+      }
+    });
+    socketInit.init(io);
+    io.on('connection', socket => {
+      console.log('Client connected');
+    });
+    httpServer.listen(process.env.PORT || 8080);
   })
   .catch(err => console.log(err));
