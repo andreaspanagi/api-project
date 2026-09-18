@@ -3,6 +3,16 @@ import React, { Component } from 'react';
 import Image from '../../../components/Image/Image';
 import './SinglePost.css';
 
+// Wrapper to inject params into class component (React Router v6 removed withRouter)
+import { useParams } from 'react-router-dom';
+
+function withParams(WrappedComponent) {
+  return function WithParamsWrapper(props) {
+    const params = useParams();
+    return <WrappedComponent {...props} params={params} />;
+  };
+}
+
 class SinglePost extends Component {
   state = {
     title: '',
@@ -13,7 +23,7 @@ class SinglePost extends Component {
   };
 
   componentDidMount() {
-    const postId = this.props.match.params.postId;
+    const postId = this.props.params.postId;
     fetch('http://localhost:8080/feed/post/' + postId, {
       headers: {
         Authorization: 'Bearer ' + this.props.token
@@ -21,21 +31,22 @@ class SinglePost extends Component {
     })
       .then(res => {
         if (res.status !== 200) {
-          throw new Error('Failed to fetch status');
+          throw new Error('Failed to fetch post');
         }
         return res.json();
       })
       .then(resData => {
         this.setState({
           title: resData.post.title,
-          author: resData.post.creator.name,
+          // creator is now populated in backend (getPost uses .populate('creator'))
+          author: resData.post.creator ? resData.post.creator.name : 'Unknown',
           image: 'http://localhost:8080/' + resData.post.imageUrl,
           date: new Date(resData.post.createdAt).toLocaleDateString('en-US'),
           content: resData.post.content
         });
       })
       .catch(err => {
-        console.log(err);
+        console.error(err);
       });
   }
 
@@ -55,4 +66,4 @@ class SinglePost extends Component {
   }
 }
 
-export default SinglePost;
+export default withParams(SinglePost);

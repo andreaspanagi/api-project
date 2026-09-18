@@ -1,5 +1,5 @@
-import React, { Component, Fragment } from 'react';
-import { Route, Switch, Redirect, withRouter } from 'react-router-dom';
+import React, { Component } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
 
 import Layout from './components/Layout/Layout';
 import Backdrop from './components/Backdrop/Backdrop';
@@ -74,13 +74,11 @@ class App extends Component {
           throw new Error('Validation failed.');
         }
         if (res.status !== 200 && res.status !== 201) {
-          console.log('Error!');
           throw new Error('Could not authenticate you!');
         }
         return res.json();
       })
       .then(resData => {
-        console.log(resData);
         this.setState({
           isAuth: true,
           token: resData.token,
@@ -90,19 +88,13 @@ class App extends Component {
         localStorage.setItem('token', resData.token);
         localStorage.setItem('userId', resData.userId);
         const remainingMilliseconds = 60 * 60 * 1000;
-        const expiryDate = new Date(
-          new Date().getTime() + remainingMilliseconds
-        );
+        const expiryDate = new Date(new Date().getTime() + remainingMilliseconds);
         localStorage.setItem('expiryDate', expiryDate.toISOString());
         this.setAutoLogout(remainingMilliseconds);
       })
       .catch(err => {
-        console.log(err);
-        this.setState({
-          isAuth: false,
-          authLoading: false,
-          error: err
-        });
+        console.error(err);
+        this.setState({ isAuth: false, authLoading: false, error: err });
       });
   };
 
@@ -127,23 +119,16 @@ class App extends Component {
           );
         }
         if (res.status !== 200 && res.status !== 201) {
-          console.log('Error!');
           throw new Error('Creating a user failed!');
         }
         return res.json();
       })
-      .then(resData => {
-        console.log(resData);
+      .then(() => {
         this.setState({ isAuth: false, authLoading: false });
-        this.props.history.replace('/');
       })
       .catch(err => {
-        console.log(err);
-        this.setState({
-          isAuth: false,
-          authLoading: false,
-          error: err
-        });
+        console.error(err);
+        this.setState({ isAuth: false, authLoading: false, error: err });
       });
   };
 
@@ -159,58 +144,54 @@ class App extends Component {
 
   render() {
     let routes = (
-      <Switch>
+      <Routes>
         <Route
           path="/"
-          exact
-          render={props => (
+          element={
             <LoginPage
-              {...props}
               onLogin={this.loginHandler}
               loading={this.state.authLoading}
             />
-          )}
+          }
         />
         <Route
           path="/signup"
-          exact
-          render={props => (
+          element={
             <SignupPage
-              {...props}
               onSignup={this.signupHandler}
               loading={this.state.authLoading}
             />
-          )}
+          }
         />
-        <Redirect to="/" />
-      </Switch>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     );
+
     if (this.state.isAuth) {
       routes = (
-        <Switch>
+        <Routes>
           <Route
             path="/"
-            exact
-            render={props => (
+            element={
               <FeedPage userId={this.state.userId} token={this.state.token} />
-            )}
+            }
           />
           <Route
             path="/:postId"
-            render={props => (
+            element={
               <SinglePostPage
-                {...props}
                 userId={this.state.userId}
                 token={this.state.token}
               />
-            )}
+            }
           />
-          <Redirect to="/" />
-        </Switch>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       );
     }
+
     return (
-      <Fragment>
+      <>
         {this.state.showBackdrop && (
           <Backdrop onClick={this.backdropClickHandler} />
         )}
@@ -236,9 +217,9 @@ class App extends Component {
           }
         />
         {routes}
-      </Fragment>
+      </>
     );
   }
 }
 
-export default withRouter(App);
+export default App;

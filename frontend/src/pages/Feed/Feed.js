@@ -1,5 +1,5 @@
 import React, { Component, Fragment } from 'react';
-import { io } from 'socket.io-client';
+import { io as openSocket } from 'socket.io-client';
 
 import Post from '../../components/Feed/Post/Post';
 import Button from '../../components/Button/Button';
@@ -24,7 +24,9 @@ class Feed extends Component {
 
   componentDidMount() {
     fetch('http://localhost:8080/auth/status', {
-      headers: { Authorization: 'Bearer ' + this.props.token }
+      headers: {
+        Authorization: 'Bearer ' + this.props.token
+      }
     })
       .then(res => {
         if (res.status !== 200) {
@@ -38,8 +40,7 @@ class Feed extends Component {
       .catch(this.catchError);
 
     this.loadPosts();
-
-    this.socket = io('http://localhost:8080');
+    this.socket = openSocket('http://localhost:8080');
     this.socket.on('posts', data => {
       if (data.action === 'create') {
         this.addPost(data.post);
@@ -61,10 +62,10 @@ class Feed extends Component {
     this.setState(prevState => {
       const updatedPosts = [...prevState.posts];
       if (prevState.postPage === 1) {
-        if (updatedPosts.length >= 2) {
+        if (prevState.posts.length >= 2) {
           updatedPosts.pop();
         }
-        updatedPosts.unshift({ ...post, imagePath: post.imageUrl });
+        updatedPosts.unshift(post);
       }
       return {
         posts: updatedPosts,
@@ -76,11 +77,13 @@ class Feed extends Component {
   updatePost = post => {
     this.setState(prevState => {
       const updatedPosts = [...prevState.posts];
-      const postIndex = updatedPosts.findIndex(p => p._id === post._id);
-      if (postIndex > -1) {
-        updatedPosts[postIndex] = { ...post, imagePath: post.imageUrl };
+      const updatedPostIndex = updatedPosts.findIndex(p => p._id === post._id);
+      if (updatedPostIndex > -1) {
+        updatedPosts[updatedPostIndex] = post;
       }
-      return { posts: updatedPosts };
+      return {
+        posts: updatedPosts
+      };
     });
   };
 
@@ -131,7 +134,9 @@ class Feed extends Component {
         Authorization: 'Bearer ' + this.props.token,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ status: this.state.status })
+      body: JSON.stringify({
+        status: this.state.status
+      })
     })
       .then(res => {
         if (res.status !== 200 && res.status !== 201) {
@@ -152,6 +157,7 @@ class Feed extends Component {
   startEditPostHandler = postId => {
     this.setState(prevState => {
       const loadedPost = { ...prevState.posts.find(p => p._id === postId) };
+
       return {
         isEditing: true,
         editPost: loadedPost
@@ -164,7 +170,9 @@ class Feed extends Component {
   };
 
   finishEditHandler = postData => {
-    this.setState({ editLoading: true });
+    this.setState({
+      editLoading: true
+    });
     const formData = new FormData();
     formData.append('title', postData.title);
     formData.append('content', postData.content);
@@ -190,11 +198,20 @@ class Feed extends Component {
         return res.json();
       })
       .then(resData => {
-        // UI updates are driven by the socket 'posts' event
-        this.setState({
-          isEditing: false,
-          editPost: null,
-          editLoading: false
+        console.log(resData);
+        const post = {
+          _id: resData.post._id,
+          title: resData.post.title,
+          content: resData.post.content,
+          creator: resData.post.creator,
+          createdAt: resData.post.createdAt
+        };
+        this.setState(prevState => {
+          return {
+            isEditing: false,
+            editPost: null,
+            editLoading: false
+          };
         });
       })
       .catch(err => {
@@ -228,10 +245,11 @@ class Feed extends Component {
       })
       .then(resData => {
         console.log(resData);
-        this.setState(prevState => {
-          const updatedPosts = prevState.posts.filter(p => p._id !== postId);
-          return { posts: updatedPosts, postsLoading: false };
-        });
+        this.loadPosts();
+        // this.setState(prevState => {
+        //   const updatedPosts = prevState.posts.filter(p => p._id !== postId);
+        //   return { posts: updatedPosts, postsLoading: false };
+        // });
       })
       .catch(err => {
         console.log(err);

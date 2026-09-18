@@ -1,26 +1,23 @@
-const path = require('path');
-
 require('dotenv').config();
+
+const path = require('path');
 const express = require('express');
-const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
 const multer = require('multer');
-const { createServer } = require('http');
-const { Server } = require('socket.io');
-const socketInit = require('./socket');
 
 const feedRoutes = require('./routes/feed');
 const authRoutes = require('./routes/auth');
 
 const app = express();
-const httpServer = createServer(app);
 
 const fileStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, 'images');
   },
   filename: (req, file, cb) => {
-    cb(null, new Date().toISOString() + '-' + file.originalname);
+    // Use a random id + original extension to avoid colon issues on Windows
+    const ext = path.extname(file.originalname);
+    cb(null, Date.now() + '-' + Math.round(Math.random() * 1e9) + ext);
   }
 });
 
@@ -36,10 +33,8 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-app.use(bodyParser.json());
-app.use(
-  multer({ storage: fileStorage, fileFilter: fileFilter }).single('image')
-);
+app.use(express.json());
+app.use(multer({ storage: fileStorage, fileFilter: fileFilter }).single('image'));
 app.use('/images', express.static(path.join(__dirname, 'images')));
 
 app.use((req, res, next) => {
@@ -49,6 +44,9 @@ app.use((req, res, next) => {
     'OPTIONS, GET, POST, PUT, PATCH, DELETE'
   );
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
   next();
 });
 
@@ -56,26 +54,25 @@ app.use('/feed', feedRoutes);
 app.use('/auth', authRoutes);
 
 app.use((error, req, res, next) => {
-  console.log(error);
+  console.error(error);
   const status = error.statusCode || 500;
   const message = error.message;
   const data = error.data;
   res.status(status).json({ message: message, data: data });
 });
 
+const PORT = process.env.PORT || 8080;
+
 mongoose
-  .connect(process.env.MONGO_URI)
-  .then(result => {
-    const io = new Server(httpServer, {
-      cors: {
-        origin: '*',
-        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
-      }
-    });
-    socketInit.init(io);
+  .connect(process.env.MONGODB_URI)
+  .then(() => {
+    console.log('Connected to MongoDB');
+    const server = app.listen(PORT, () =>
+      console.log(`Server running on port ${PORT}`)
+    );
+    const io = require('./socket').init(server);
     io.on('connection', socket => {
       console.log('Client connected');
     });
-    httpServer.listen(process.env.PORT || 8080);
   })
-  .catch(err => console.log(err));
+  .catch(err => console.error('MongoDB connection error:', err));
